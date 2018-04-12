@@ -1,10 +1,13 @@
+from __future__ import print_function
+
 import os
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
 
-import matplottery.utils as utils
+
+import matplottery.utils
 
 def set_defaults():
     from matplotlib import rcParams
@@ -35,7 +38,7 @@ def plot_stack(bgs=[],data=None,sigs=[], ratio=None,
     colors = [bg.get_attr("color") for bg in bgs]
     labels = [bg.get_attr("label") for bg in bgs]
     if not all(colors):
-        # print "Not enough colors specified, so using automatic colors"
+        # print("Not enough colors specified, so using automatic colors")
         colors = None
 
     if bgs:
@@ -43,7 +46,7 @@ def plot_stack(bgs=[],data=None,sigs=[], ratio=None,
     elif data:
         bins = data.get_edges()
     else:
-        print "What are you even trying to plot?"
+        print("What are you even trying to plot?")
         return
 
 
@@ -98,8 +101,6 @@ def plot_stack(bgs=[],data=None,sigs=[], ratio=None,
             )
     ylims = ax_main.get_ylim()
     ax_main.set_ylim([0.0,ylims[1]])
-    if ratio_range:
-        ax_main.set_ylim(ratio_range)
 
     if cms_type is not None:
         add_cms_info(ax_main, cms_type, lumi)
@@ -132,6 +133,8 @@ def plot_stack(bgs=[],data=None,sigs=[], ratio=None,
         ax_ratio.set_ylim(ylims)
         ax_ratio.legend()
         # ax_ratio.set_ylim([0.,1.])
+        if ratio_range:
+            ax_ratio.set_ylim(ratio_range)
 
         ax_ratio.set_xlabel(xlabel, horizontalalignment="right", x=1.)
     else:
