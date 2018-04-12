@@ -1,4 +1,4 @@
-from __future__ import print_function
+from __future__ import print_function, division
 
 import sys
 import array
@@ -219,6 +219,10 @@ class Hist1D(object):
             return self.divide(other)
 
     __truediv__ = __div__
+
+    def __floordiv__(self, other):
+        ''' Shorthand for division with binomial stats '''
+        return self.divide(other, binomial=True)
 
     def divide(self, other, binomial=False):
         self._check_consistency(other)
