@@ -110,10 +110,17 @@ class Hist1D(object):
         self._errors = self._errors.astype(np.float64)
 
     def init_root(self, obj, **kwargs):
-        low_edges = np.array([1.0*obj.GetBinLowEdge(ibin) for ibin in range(obj.GetNbinsX()+1)])
-        bin_widths = np.array([1.0*obj.GetBinWidth(ibin) for ibin in range(obj.GetNbinsX()+1)])
-        self._counts = np.array([1.0*obj.GetBinContent(ibin) for ibin in range(1,obj.GetNbinsX()+1)],dtype=np.float64)
-        self._errors = np.array([1.0*obj.GetBinError(ibin) for ibin in range(1,obj.GetNbinsX()+1)],dtype=np.float64)
+        nbins = obj.GetNbinsX()
+        # move under and overflow into first and last visible bins
+        # set bin error before content because setting the content updates the error?
+        obj.SetBinError(1, (obj.GetBinError(1)**2.+obj.GetBinError(0)**2.)**0.5)
+        obj.SetBinError(nbins, (obj.GetBinError(nbins)**2.+obj.GetBinError(nbins+1)**2.)**0.5)
+        obj.SetBinContent(1, obj.GetBinContent(1)+obj.GetBinContent(0))
+        obj.SetBinContent(nbins, obj.GetBinContent(nbins)+obj.GetBinContent(nbins+1))
+        low_edges = np.array([1.0*obj.GetBinLowEdge(ibin) for ibin in range(nbins+1)])
+        bin_widths = np.array([1.0*obj.GetBinWidth(ibin) for ibin in range(nbins+1)])
+        self._counts = np.array([1.0*obj.GetBinContent(ibin) for ibin in range(1,nbins+1)],dtype=np.float64)
+        self._errors = np.array([1.0*obj.GetBinError(ibin) for ibin in range(1,nbins+1)],dtype=np.float64)
         self._edges = low_edges + bin_widths
 
     def init_uproot(self, obj, **kwargs):
@@ -121,6 +128,18 @@ class Hist1D(object):
         self._errors = np.sqrt(obj.fSumw2)[1:-1]
         self._edges = np.array(self._edges)
         self._counts = np.array(self._counts)
+
+        # under and overflow
+        # if no sumw2, then we'll let the errors=sqrt(counts)
+        # handle the error properly (since we move in the counts at least)
+        underflow, overflow = obj[0], obj[-1]
+        self._counts[0] += underflow
+        self._counts[-1] += overflow
+        if obj.fSumw2:
+            eunderflow2, eoverflow2 = obj.fSumw2[0], obj.fSumw2[-1]
+            self._errors[0] = (self._errors[0]**2.+eunderflow2)**0.5
+            self._errors[-1] = (self._errors[-1]**2.+eoverflow2)**0.5
+
         if len(self._errors) == 0:
             self._errors = self._counts**0.5
 
@@ -155,6 +174,9 @@ class Hist1D(object):
     def get_errors_down(self):
         return self._errors_down
 
+    def get_relative_errors(self):
+        return self._errors / self._counts
+
     def get_counts(self):
         return self._counts
 
@@ -171,10 +193,10 @@ class Hist1D(object):
         return self._edges[1:]-self._edges[:-1]
 
     def get_integral(self):
-        return np.sum(self._counts)
+        return float(np.sum(self._counts))
 
     def get_integral_and_error(self):
-        return np.sum(self._counts), np.sum(self._errors**2.0)**0.5
+        return float(np.sum(self._counts)), float(np.sum(self._errors**2.0)**0.5)
 
     def _check_consistency(self, other):
         if len(self._edges) != len(other._edges):
