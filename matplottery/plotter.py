@@ -56,7 +56,11 @@ def plot_stack(bgs=[],data=None,sigs=[], ratio=None,
 
     sbgs = sum(bgs)
     total_integral = sbgs.get_integral()
-    label_map = { bg.get_attr("label"):"{:.0f}%".format(100.0*bg.get_integral()/total_integral) for bg in bgs }
+
+    def percent(bg):
+        if total_integral > 0: return 100.0*bg.get_integral()/total_integral
+        else: return 0
+    label_map = { bg.get_attr("label"):"{:.0f}%".format(percent(bg)) for bg in bgs }
     # label_map = { label:"{:.1f}".format(hist.get_integral()) for label,hist in zip(labels,bgs) }
 
     mpl_bg_hist = {
