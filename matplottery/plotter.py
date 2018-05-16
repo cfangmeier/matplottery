@@ -1,6 +1,5 @@
 from __future__ import print_function
 
-import os
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
@@ -39,10 +38,13 @@ def plot_stack(bgs=None, data=None, sigs=None,
                mpl_ratio_params=None,
                mpl_figure_params=None,
                mpl_legend_params=None,
+               mpl_sig_params=None,
                cms_type=None,
                lumi="-1",
+               xticks=None,
                ratio_range=None,
-               do_bkg_syst=False):
+               do_bkg_syst=False,
+               do_bkg_errors=False):
     if bgs is None: bgs = []
     if sigs is None: sigs = []
     if mpl_hist_params is None: mpl_hist_params = {}
@@ -50,6 +52,7 @@ def plot_stack(bgs=None, data=None, sigs=None,
     if mpl_ratio_params is None: mpl_ratio_params = {}
     if mpl_figure_params is None: mpl_figure_params = {}
     if mpl_legend_params is None: mpl_legend_params = {}
+    if mpl_sig_params is None: mpl_sig_params = {}
 
     set_defaults()
 
@@ -98,7 +101,20 @@ def plot_stack(bgs=None, data=None, sigs=None,
     else:
         fig, ax_main = plt.subplots(1, 1, **mpl_figure_params)
 
-    ax_main.hist(centers, bins=bins, weights=weights, label=labels, color=colors, **mpl_bg_hist)
+    _, _, patches = ax_main.hist(centers, bins=bins, weights=weights, label=labels, color=colors, **mpl_bg_hist)
+    if do_bkg_errors:
+        for bg, patch in zip(bgs, patches):
+            patch = patch[0]
+            ax_main.errorbar(
+                bg.get_bin_centers(),
+                bg.counts,
+                yerr=bg.errors,
+                markersize=patch.get_linewidth(),
+                marker="o",
+                linestyle="",
+                linewidth=patch.get_linewidth(),
+                color=patch.get_edgecolor(),
+            )
 
     if do_bkg_syst:
         tot_vals = sbgs.counts
@@ -113,27 +129,34 @@ def plot_stack(bgs=None, data=None, sigs=None,
     if data:
         data_xerr = None
         select = data.counts != 0
-        # data_xerr = (data.get_bin_widths()/2)[select]
         ax_main.errorbar(
                 data.get_bin_centers()[select],
                 data.counts[select],
                 yerr=data.errors[select],
                 xerr=data_xerr,
-                label=data.get_attr("label", "Data"), 
+                label=data.get_attr("label", "Data"),
                 zorder=6, **mpl_data_hist)
     if sigs:
         for sig in sigs:
-            ax_main.errorbar(sig.get_bin_centers(), sig.counts, yerr=sig.errors, xerr=None,
-                             label=sig.get_attr("label", "Data"), markersize=3,linewidth=1.5, linestyle="", marker="o",
-                             color=sig.get_attr("color"))
+            if mpl_sig_params.get("hist",True):
+                ax_main.hist(sig.get_bin_centers(), bins=bins, weights=sig.counts, color="r", histtype="step",
+                             label=sig.get_attr("label","sig"))
+                ax_main.errorbar(sig.get_bin_centers(), sig.counts, yerr=sig.errors, xerr=None,
+                                 markersize=1, linewidth=1.5, linestyle="",marker="o",color=sig.get_attr("color"))
+            else:
+                select = sig.counts != 0
+                ax_main.errorbar(sig.get_bin_centers()[select], sig.counts[select], yerr=sig.errors[select], xerr=None,
+                                 markersize=3, linewidth=1.5, linestyle="",marker="o", color=sig.get_attr("color"),
+                                 label=sig.get_attr("label","sig"))
 
     ax_main.set_ylabel(ylabel, horizontalalignment="right", y=1.)
     ax_main.set_title(title)
-    ax_main.legend(
-            handler_map={matplotlib.patches.Patch: utils.TextPatchHandler(label_map)},
-            loc='upper right',
-            **mpl_legend_params
-            )
+    legend = ax_main.legend(
+        handler_map={matplotlib.patches.Patch: utils.TextPatchHandler(label_map)},
+        loc='upper right',
+        **mpl_legend_params
+        )
+    legend.set_zorder(10)
     ylims = ax_main.get_ylim()
     ax_main.set_ylim([0.0,ylims[1]])
 
@@ -178,18 +201,24 @@ def plot_stack(bgs=None, data=None, sigs=None,
 
         ax_ratio.set_ylabel(mpl_opts_ratio["label"], horizontalalignment="right", y=1.)
         ax_ratio.set_xlabel(xlabel, horizontalalignment="right", x=1.)
+
+        if xticks is not None:
+            ax_ratio.xaxis.set_ticks(ratios.get_bin_centers())
+            ax_ratio.set_xticklabels(xticks, horizontalalignment='center')
     else:
         ax_main.set_xlabel(xlabel, horizontalalignment="right", x=1.)
 
 
 def plot_2d(hist,
-            title="",
-            xlabel="", ylabel="",
+            title="", xlabel="", ylabel="",
+            mpl_hist_params={}, mpl_2d_params={}, mpl_ratio_params={},
+            mpl_figure_params={}, mpl_legend_params={},
             cms_type=None, lumi="-1",
             do_log=False, do_projection=False, do_profile=False,
-            cmap="PuBu_r", colz_fmt=None,
+            cmap="PuBu_r", do_colz=False, colz_fmt=".1f",
             logx=False, logy=False,
-            xticks=None, yticks=None):
+            xticks=[], yticks=[],
+            zrange=[]):
     set_defaults()
 
     projx, projy = None, None
@@ -230,6 +259,10 @@ def plot_2d(hist,
     ax.set_ylabel(ylabel, horizontalalignment="right", y=1.)
 
     mpl_2d_hist = {"cmap": cmap}
+    mpl_2d_hist.update(mpl_2d_params)
+    if zrange:
+        mpl_2d_hist["vmin"] = zrange[0]
+        mpl_2d_hist["vmax"] = zrange[1]
 
     H = hist.counts
     X, Y = np.meshgrid(*hist.edges)
@@ -255,6 +288,7 @@ def plot_2d(hist,
             np.zeros(len(xedges))+yedges[0]
             ]).T
         x = ax.transData.transform(pts)[:,0]
+        y = ax.transData.transform(pts)[:,1]
         fxwidths = (x[1:] - x[:-1]) / (x.max() - x.min())
 
         info = np.c_[
@@ -264,7 +298,11 @@ def plot_2d(hist,
                 counts,
                 errors
                 ]
-        norm = mpl_2d_hist.get("norm", matplotlib.colors.Normalize(vmin=H.min(),vmax=H.max()))
+        norm = mpl_2d_hist.get("norm",
+                matplotlib.colors.Normalize(
+                    mpl_2d_hist.get("vmin",H.min()),
+                    mpl_2d_hist.get("vmax",H.max()),
+                    ))
         val_to_rgba = matplotlib.cm.ScalarMappable(norm=norm, cmap=cmap).to_rgba
         fs = min(int(30.0/min(len(xcenters),len(ycenters))),15)
 
@@ -273,9 +311,9 @@ def plot_2d(hist,
             return buff
 
         do_autosize = True
-        for x,y,fxw,bv,be in info:
+        for x, y, fxw, bv, be in info:
             if do_autosize:
-                fs_ = 4.5*fxw*fs
+                fs_ = min(5.5*fxw*fs,14)
             else:
                 fs_ = 1.0*fs
             color = "w" if (utils.compute_darkness(*val_to_rgba(bv)) > 0.45) else "k"

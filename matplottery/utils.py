@@ -133,6 +133,8 @@ class Hist1D(object):
 
     def init_uproot(self, obj, **kwargs):
         self._edges = np.array(obj.fXaxis.fXbins)
+        if len(self._edges) == 0:
+            self._edges = np.linspace(obj.low, obj.high, obj.numbins+1)
         self._counts = np.array(obj.values)
         self._errors = np.sqrt(obj.fSumw2)[1:-1]
 
@@ -479,15 +481,15 @@ class Hist2D(Hist1D):
 
     def get_x_projection(self):
         hnew = Hist1D()
-        hnew._counts = self._counts.sum(axis=0)
-        hnew._errors = np.sqrt((self._errors**2).sum(axis=0))
+        hnew._counts = self._counts.mean(axis=0)
+        hnew._errors = np.sqrt((self._errors**2).mean(axis=0))
         hnew._edges = self._edges[0]
         return hnew
 
     def get_y_projection(self):
         hnew = Hist1D()
-        hnew._counts = self._counts.sum(axis=1)
-        hnew._errors = np.sqrt((self._errors**2).sum(axis=1))
+        hnew._counts = self._counts.mean(axis=1)
+        hnew._errors = np.sqrt((self._errors**2).mean(axis=1))
         hnew._edges = self._edges[1]
         return hnew
 
@@ -525,6 +527,7 @@ def to_html_table(rows, col_labels, row_labels, table_class):
         body.append(f'<tr><td nowrap>{label}</td>' + ''.join(f'<td nowrap>{val}</td>' for val in row))
     return f'<table class="table {table_class}">' + header + ''.join(body) + '</table>'
 
+
 def hist_to_table(data: Hist1D, bgs: [Hist1D], column_labels=(), format="{:.2f}",
                   table_class="table-condensed"):
 
@@ -549,6 +552,7 @@ def hist_to_table(data: Hist1D, bgs: [Hist1D], column_labels=(), format="{:.2f}"
     table.append('</tbody></table>')
     return ''.join(table)
 
+
 def register_root_palettes():
     import matplotlib.pyplot as plt
     # RGB stops taken from
@@ -556,16 +560,16 @@ def register_root_palettes():
 
     palettes = {
             "kBird": {
-                "reds": [ 0.2082, 0.0592, 0.0780, 0.0232, 0.1802, 0.5301, 0.8186, 0.9956, 0.9764 ],
-                "greens": [ 0.1664, 0.3599, 0.5041, 0.6419, 0.7178, 0.7492, 0.7328, 0.7862, 0.9832 ],
-                "blues": [ 0.5293, 0.8684, 0.8385, 0.7914, 0.6425, 0.4662, 0.3499, 0.1968, 0.0539 ],
+                "reds": [0.2082, 0.0592, 0.0780, 0.0232, 0.1802, 0.5301, 0.8186, 0.9956, 0.9764],
+                "greens": [0.1664, 0.3599, 0.5041, 0.6419, 0.7178, 0.7492, 0.7328, 0.7862, 0.9832],
+                "blues": [0.5293, 0.8684, 0.8385, 0.7914, 0.6425, 0.4662, 0.3499, 0.1968, 0.0539],
                 "stops": np.linspace(0.,1.,9),
                 },
             "kRainbow": {
-                "reds": [ 0./255., 5./255., 15./255., 35./255., 102./255., 196./255., 208./255., 199./255., 110./255.],
-                "greens": [ 0./255., 48./255., 124./255., 192./255., 206./255., 226./255., 97./255., 16./255., 0./255.],
-                "blues": [ 99./255., 142./255., 198./255., 201./255., 90./255., 22./255., 13./255., 8./255., 2./255.],
-                "stops": np.linspace(0.,1.,9),
+                "reds": [0./255., 5./255., 15./255., 35./255., 102./255., 196./255., 208./255., 199./255., 110./255.],
+                "greens": [0./255., 48./255., 124./255., 192./255., 206./255., 226./255., 97./255., 16./255., 0./255.],
+                "blues": [99./255., 142./255., 198./255., 201./255., 90./255., 22./255., 13./255., 8./255., 2./255.],
+                "stops": np.linspace(0., 1., 9),
                 },
             "SUSY": {
                 "reds": [0.50, 0.50, 1.00, 1.00, 1.00],
@@ -581,9 +585,9 @@ def register_root_palettes():
         greens = palettes[key]["greens"]
         blues = palettes[key]["blues"]
         cdict = {
-            "red": zip(stops,reds,reds),
-            "green": zip(stops,greens,greens),
-            "blue": zip(stops,blues,blues)
+            "red": zip(stops, reds, reds),
+            "green": zip(stops, greens, greens),
+            "blue": zip(stops, blues, blues)
         }
         plt.register_cmap(name=key, data=cdict)
 
