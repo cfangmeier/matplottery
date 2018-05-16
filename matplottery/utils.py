@@ -12,9 +12,11 @@ if sys.version_info[0] >= 3:
 
 MET_LATEX = "E$\\!\\!\\! \\backslash{}_\\mathrm{T}$"
 
-def compute_darkness(r,g,b,a=1.0):
+
+def compute_darkness(r, g, b, a=1.0):
     # darkness = 1 - luminance
     return a*(1.0 - (0.299*r + 0.587*g + 0.114*b))
+
 
 def clopper_pearson_error(passed, total, level=0.6827):
     """
@@ -25,6 +27,7 @@ def clopper_pearson_error(passed, total, level=0.6827):
     low = scipy.stats.beta.ppf(alpha, passed, total-passed+1)
     high = scipy.stats.beta.ppf(1 - alpha, passed+1, total-passed)
     return low, high
+
 
 def fill_fast(hist, xvals, yvals=None, weights=None):
     """
@@ -39,15 +42,16 @@ def fill_fast(hist, xvals, yvals=None, weights=None):
     if weights is None:
         weights = np.ones(len(xvals))
     xvals = array.array("d", xvals)
-    weights = array.array("d",weights)
+    weights = array.array("d", weights)
     if not two_d:
-        hist.FillN(len(xvals),xvals,weights)
+        hist.FillN(len(xvals), xvals, weights)
     else:
-        hist.FillN(len(xvals),xvals,yvals,weights)
+        hist.FillN(len(xvals), xvals, yvals, weights)
+
 
 class TextPatchHandler(object):
-    def __init__(self, label_map={}):
-        self.label_map = label_map
+    def __init__(self, label_map=None):
+        self.label_map = label_map if label_map is not None else {}
         super(TextPatchHandler, self).__init__()
 
     def legend_artist(self, legend, orig_handle, fontsize, handlebox):
@@ -59,15 +63,18 @@ class TextPatchHandler(object):
         lw = orig_handle.get_linewidth()
         color = "w" if (compute_darkness(*fc) > 0.45) else "k"
         text = self.label_map.get(label,"")
-        patch1 = matplotlib.patches.Rectangle([x0, y0], width, height, facecolor=fc, edgecolor=ec, linewidth=lw, transform=handlebox.get_transform())
-        patch2 = matplotlib.text.Text(x0+0.5*width,y0+0.45*height,text,transform=handlebox.get_transform(),fontsize=0.55*fontsize, color=color, ha="center",va="center")
+        patch1 = matplotlib.patches.Rectangle([x0, y0], width, height, facecolor=fc, edgecolor=ec, linewidth=lw,
+                                              transform=handlebox.get_transform())
+        patch2 = matplotlib.text.Text(x0+0.5*width, y0+0.45*height, text, transform=handlebox.get_transform(),
+                                      fontsize=0.55*fontsize, color=color, ha="center",va="center")
         handlebox.add_artist(patch1)
         handlebox.add_artist(patch2)
         return patch1
 
+
 class Hist1D(object):
 
-    def __init__(self, obj=[], **kwargs):
+    def __init__(self, obj=None, **kwargs):
         tstr = str(type(obj))
 
         self._counts = None
@@ -78,11 +85,11 @@ class Hist1D(object):
         self._extra = {}
         kwargs = self.init_extra(**kwargs)
         if "ROOT." in tstr:
-            self.init_root(obj,**kwargs)
+            self.init_root(obj, **kwargs)
         elif "uproot" in tstr:
-            self.init_uproot(obj,**kwargs)
+            self.init_uproot(obj, **kwargs)
         elif "ndarray" in tstr or "list" in tstr:
-            self.init_numpy(obj,**kwargs)
+            self.init_numpy(obj, **kwargs)
 
     def copy(self):
         hnew = self.__class__()
@@ -120,15 +127,14 @@ class Hist1D(object):
             obj.SetBinContent(nbins, obj.GetBinContent(nbins)+obj.GetBinContent(nbins+1))
         low_edges = np.array([1.0*obj.GetBinLowEdge(ibin) for ibin in range(nbins+1)])
         bin_widths = np.array([1.0*obj.GetBinWidth(ibin) for ibin in range(nbins+1)])
-        self._counts = np.array([1.0*obj.GetBinContent(ibin) for ibin in range(1,nbins+1)],dtype=np.float64)
-        self._errors = np.array([1.0*obj.GetBinError(ibin) for ibin in range(1,nbins+1)],dtype=np.float64)
+        self._counts = np.array([1.0*obj.GetBinContent(ibin) for ibin in range(1, nbins+1)], dtype=np.float64)
+        self._errors = np.array([1.0*obj.GetBinError(ibin) for ibin in range(1, nbins+1)], dtype=np.float64)
         self._edges = low_edges + bin_widths
 
     def init_uproot(self, obj, **kwargs):
-        (self._counts, self._edges) = obj.numpy
+        self._edges = np.array(obj.fXaxis.fXbins)
+        self._counts = np.array(obj.values)
         self._errors = np.sqrt(obj.fSumw2)[1:-1]
-        self._edges = np.array(self._edges)
-        self._counts = np.array(self._counts)
 
         if not kwargs.get("no_overflow",False):
             # under and overflow
@@ -161,8 +167,12 @@ class Hist1D(object):
         low, high = self._edges[0], self._edges[-1]
         cent = 0.5*(self._edges[0] + self._edges[-1])
         width = high-low
-        if pdf == "gaus": vals = np.random.normal(cent, 0.2*width, N)
-        elif pdf == "uniform": vals = np.random.uniform(low, high, N)
+        if pdf == "gaus":
+            vals = np.random.normal(cent, 0.2*width, N)
+        elif pdf == "uniform":
+            vals = np.random.uniform(low, high, N)
+        else:
+            raise ValueError("Unsupported pdf: "+pdf)
         counts, _ = np.histogram(vals, bins=self._edges)
         self._counts += counts
         self._errors = np.sqrt(self._errors**2. + counts)
@@ -170,6 +180,10 @@ class Hist1D(object):
     @property
     def errors(self):
         return self._errors
+
+    @errors.setter
+    def errors(self, errors):
+        self._errors = errors
 
     @property
     def counts(self):
@@ -213,9 +227,50 @@ class Hist1D(object):
         return float(np.sum(self._counts)), float(np.sum(self._errors**2.0)**0.5)
 
     def _check_consistency(self, other):
-        if len(self._edges) != len(other._edges):
-            raise Exception("These histograms cannot be combined due to different binning")
+        if len(self._edges) != len(other.edges):
+            raise ValueError("These histograms cannot be combined due to different binning")
         return True
+
+    def rebin(self, nbins, min_, max_):
+        low_edges = self.edges[:-1]
+        high_edges = self.edges[1:]
+        vals = self.counts
+        vars = self.errors**2
+        widths = self.get_bin_widths()
+
+        vals_new = np.zeros(nbins, dtype=vals.dtype)
+        vars_new = np.zeros(nbins, dtype=vals.dtype)
+        edges_new = np.linspace(min_, max_, nbins+1, dtype=vals.dtype)
+
+        for i, (low, high) in enumerate(zip(edges_new[:-1], edges_new[1:])):
+            # wholly contained bins
+            b_idx = ((low_edges >= low) * (high_edges <= high)).nonzero()[0]
+            bin_sum = np.sum(vals[b_idx])
+            vars_new = np.sum(vars[b_idx])
+            # internally contained
+            b_idx = ((low_edges < low) * (high_edges > high)).nonzero()[0]
+            bin_sum += np.sum(vals[b_idx])
+            vars_new += np.sum(vars[b_idx])
+            # left edge
+            b_idx = ((low_edges < high) * (low_edges >= low) * (high_edges > high)).nonzero()[0]
+            if len(b_idx) != 0:
+                idx = b_idx[0]
+                frac = (high - low_edges[idx])/widths[idx]
+                bin_sum += vals[idx]*frac
+                vars_new += vars[idx]*frac**2
+            # right edge
+            b_idx = ((high_edges > low) * (low_edges < low) * (high_edges <= high)).nonzero()[0]
+            if len(b_idx) != 0:
+                idx = b_idx[0]
+                frac = (high_edges[idx] - low)/widths[idx]
+                bin_sum += vals[idx]*frac
+                vars_new += vars[idx]*frac**2
+
+            vals_new[i] = bin_sum
+
+        self._counts = vals_new
+        self._edges = edges_new
+        self._errors = np.sqrt(vars_new)
 
     def __eq__(self, other):
         if not self._check_consistency(other): return False
@@ -231,8 +286,8 @@ class Hist1D(object):
             return other
         self._check_consistency(other)
         hnew = self.__class__()
-        hnew._counts = self._counts + other._counts
-        hnew._errors = (self._errors**2. + other._errors**2.)**0.5
+        hnew._counts = self._counts + other.counts
+        hnew._errors = (self._errors**2. + other.errors**2.)**0.5
         hnew._edges = self._edges
         hnew._extra = self._extra
         return hnew
@@ -242,8 +297,8 @@ class Hist1D(object):
     def __sub__(self, other):
         self._check_consistency(other)
         hnew = self.__class__()
-        hnew._counts = self._counts - other._counts
-        hnew._errors = (self._errors**2. + other._errors**2.)**0.5
+        hnew._counts = self._counts - other.counts
+        hnew._errors = (self._errors**2. + other.errors**2.)**0.5
         hnew._edges = self._edges
         hnew._extra = self._extra
         return hnew
@@ -257,7 +312,7 @@ class Hist1D(object):
     __truediv__ = __div__
 
     def __floordiv__(self, other):
-        ''' Shorthand for division with binomial stats '''
+        """ Shorthand for division with binomial stats """
         return self.divide(other, binomial=True)
 
     def divide(self, other, binomial=False):
@@ -267,10 +322,10 @@ class Hist1D(object):
         hnew._extra = self._extra
         with np.errstate(divide="ignore",invalid="ignore"):
             if not binomial:
-                hnew._counts = self._counts / other._counts
+                hnew._counts = self._counts / other.counts
                 hnew._errors = (
-                        (self._errors/other._counts)**2.0 +
-                        (other._errors*self._counts/(other._counts)**2.0)**2.0
+                        (self._errors/other.counts)**2 +
+                        (other.errors*self.counts/other.counts**2)**2
                         )**0.5
             else:
                 hnew._errors_down, hnew._errors_up = clopper_pearson_error(self._counts,other._counts)
@@ -281,7 +336,6 @@ class Hist1D(object):
                 hnew._errors_up = hnew._errors_up - hnew._counts
                 hnew._errors_down = hnew._counts - hnew._errors_down
         return hnew
-
 
     def __mul__(self, fact):
         if type(fact) in [float,int]:
@@ -322,10 +376,11 @@ class Hist1D(object):
         self._extra[attr] = val
 
     def get_attr(self, attr, default=None):
-        return self._extra.get(attr,default)
+        return self._extra.get(attr, default)
 
     def get_attrs(self):
         return self._extra
+
 
 class Hist2D(Hist1D):
 
@@ -352,7 +407,7 @@ class Hist2D(Hist1D):
                 # if weighted entries, need to get sum of sq. weights per bin
                 # and sqrt of that is bin error
                 kwargs["weights"] = kwargs["weights"]**2.
-                counts, _, _ = np.histogram2d(obj[:,0],obj[:,1],**kwargs)
+                counts, _, _ = np.histogram2d(obj[:, 0], obj[:, 1], **kwargs)
                 self._errors = np.sqrt(counts.T)
         self._errors = self._errors.astype(np.float64)
 
@@ -384,10 +439,18 @@ class Hist2D(Hist1D):
         # https://github.com/scikit-hep/uproot/blob/master/uproot/hist.py#L79
         err2 = np.array(obj.fSumw2)
         vals = np.array(obj)
-        xedges = obj.fXaxis.fXbins
-        yedges = obj.fYaxis.fXbins
+        x_ax, y_ax = obj.fXaxis, obj.fYaxis
+        xedges = x_ax.fXbins
+        if not xedges:
+            xedges = np.linspace(x_ax.fXmin, x_ax.fXmax, x_ax.fNbins+1)
+        yedges = y_ax.fXbins
+        if not yedges:
+            yedges = np.linspace(y_ax.fXmin, y_ax.fXmax, y_ax.fNbins+1)
         self._counts = vals.reshape(len(yedges)+1,len(xedges)+1)[1:-1, 1:-1]
-        self._errors = np.sqrt(err2.reshape(len(yedges)+1,len(xedges)+1)[1:-1, 1:-1])
+        if err2:
+            self._errors = np.sqrt(err2.reshape(len(yedges)+1,len(xedges)+1)[1:-1, 1:-1])
+        else:
+            self._errors = np.sqrt(self.counts)
         self._edges = np.array(xedges), np.array(yedges)
 
     def _check_consistency(self, other):
@@ -407,12 +470,12 @@ class Hist2D(Hist1D):
     def get_bin_centers(self):
         xcenters = 0.5*(self._edges[0][1:]+self._edges[0][:-1])
         ycenters = 0.5*(self._edges[1][1:]+self._edges[1][:-1])
-        return (xcenters,ycenters)
+        return xcenters, ycenters
 
     def get_bin_widths(self):
         xwidths = self._edges[0][1:]-self._edges[0][:-1]
         ywidths = self._edges[1][1:]-self._edges[1][:-1]
-        return (xwidths,ywidths)
+        return xwidths, ywidths
 
     def get_x_projection(self):
         hnew = Hist1D()
@@ -430,11 +493,11 @@ class Hist2D(Hist1D):
 
     def _calculate_profile(self, counts, errors, edges_to_sum, edges):
         centers = 0.5*(edges_to_sum[:-1]+edges_to_sum[1:])
-        num = np.matmul(counts.T,centers)
-        den = np.sum(counts,axis=0)
-        num_err = np.matmul(errors.T**2,centers**2)**0.5
+        num = np.matmul(counts.T, centers)
+        den = np.sum(counts, axis=0)
+        num_err = np.matmul(errors.T**2, centers**2)**0.5
         den_err = np.sum(errors**2, axis=0)**0.5
-        with np.errstate(divide="ignore",invalid="ignore"):
+        with np.errstate(divide="ignore", invalid="ignore"):
             r_val = num/den
             r_err = ((num_err/den)**2 + (den_err*num/den**2.0)**2.0)**0.5
         hnew = Hist1D()
@@ -453,7 +516,41 @@ class Hist2D(Hist1D):
         yedges = self._edges[1]
         return self._calculate_profile(self._counts.T, self._errors.T, xedges, yedges)
 
+
+def to_html_table(rows, col_labels, row_labels, table_class):
+    header = '<thead><tr>'+ ''.join(f'<th nowrap>{label}</th>' for label in col_labels) + '</tr></thead>'
+
+    body = []
+    for label, row in zip(row_labels, rows):
+        body.append(f'<tr><td nowrap>{label}</td>' + ''.join(f'<td nowrap>{val}</td>' for val in row))
+    return f'<table class="table {table_class}">' + header + ''.join(body) + '</table>'
+
+def hist_to_table(data: Hist1D, bgs: [Hist1D], column_labels=(), format="{:.2f}",
+                  table_class="table-condensed"):
+
+    def row(hist, label=None):
+        table.append('<tr>')
+        label = hist.get_attr('label') if label is None else label
+        table.append(f"<td nowrap><strong>{label}</strong></td>")
+        table.extend(f'<td>{format.format(count)}</td>' for count in hist.counts)
+        table.append(f'<td>{format.format(sum(hist.counts))}</td></tr>\n')
+
+    table = [f'<table class="table {table_class}"><thead><tr><th/>']
+    if column_labels:
+        table.extend(f'<th nowrap>{label}</th>' for label in column_labels)
+    else:
+        table.extend(f'<th nowrap>[{low:g}, {high:g})</th>'
+                     for low, high in zip(data.edges[:-1], data.edges[1:]))
+    table.append('<th nowrap>Total</th></tr></thead><tbody>\n')
+    for hist in bgs:
+        row(hist)
+    row(sum(bgs), label='Total BG')
+    row(data)
+    table.append('</tbody></table>')
+    return ''.join(table)
+
 def register_root_palettes():
+    import matplotlib.pyplot as plt
     # RGB stops taken from
     # https://github.com/root-project/root/blob/9acb02a9524b2d9d5edb57c519aea4f4ab8022ac/core/base/src/TColor.cxx#L2523
 
@@ -488,5 +585,5 @@ def register_root_palettes():
             "green": zip(stops,greens,greens),
             "blue": zip(stops,blues,blues)
         }
-        matplotlib.pyplot.register_cmap(name=key, data=cdict)
+        plt.register_cmap(name=key, data=cdict)
 
