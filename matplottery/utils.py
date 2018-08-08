@@ -138,7 +138,7 @@ class Hist1D(object):
         self._counts = np.array(obj.values)
         self._errors = np.sqrt(obj.fSumw2)[1:-1]
 
-        if not kwargs.get("no_overflow",False):
+        if not kwargs.get("no_overflow", False):
             # under and overflow
             # if no sumw2, then we'll let the errors=sqrt(counts)
             # handle the error properly (since we move in the counts at least)
@@ -183,6 +183,18 @@ class Hist1D(object):
     def errors(self):
         return self._errors
 
+    @property
+    def errors_up(self):
+        return self._errors_up
+
+    @property
+    def errors_down(self):
+        return self._errors_down
+
+    @property
+    def relative_errors(self):
+        return self._errors / self._counts
+
     @errors.setter
     def errors(self, errors):
         self._errors = errors
@@ -195,37 +207,24 @@ class Hist1D(object):
     def edges(self):
         return self._edges
 
-    def get_errors(self):
-        return self._errors
-
-    def get_errors_up(self):
-        return self._errors_up
-
-    def get_errors_down(self):
-        return self._errors_down
-
-    def get_relative_errors(self):
-        return self._errors / self._counts
-
-    def get_counts(self):
-        return self._counts
-
-    def get_counts_errors(self):
+    @property
+    def counts_errors(self):
         return self._counts, self._errors
 
-    def get_edges(self):
-        return self._edges
-
-    def get_bin_centers(self):
+    @property
+    def bin_centers(self):
         return 0.5*(np.array(self._edges[1:])+np.array(self._edges[:-1]))
 
-    def get_bin_widths(self):
+    @property
+    def bin_widths(self):
         return self._edges[1:]-self._edges[:-1]
 
-    def get_integral(self):
+    @property
+    def integral(self):
         return float(np.sum(self._counts))
 
-    def get_integral_and_error(self):
+    @property
+    def integral_and_error(self):
         return float(np.sum(self._counts)), float(np.sum(self._errors**2.0)**0.5)
 
     def _check_consistency(self, other):
@@ -233,16 +232,17 @@ class Hist1D(object):
             raise ValueError("These histograms cannot be combined due to different binning")
         return True
 
-    def rebin(self, nbins, min_, max_):
+    def _rebin(self, edges_new):
         low_edges = self.edges[:-1]
         high_edges = self.edges[1:]
         vals = self.counts
         vars = self.errors**2
-        widths = self.get_bin_widths()
+        widths = self.bin_widths
 
+        nbins = len(edges_new) - 1
         vals_new = np.zeros(nbins, dtype=vals.dtype)
         vars_new = np.zeros(nbins, dtype=vals.dtype)
-        edges_new = np.linspace(min_, max_, nbins+1, dtype=vals.dtype)
+        # edges_new = np.linspace(min_, max_, nbins+1, dtype=vals.dtype)
 
         for i, (low, high) in enumerate(zip(edges_new[:-1], edges_new[1:])):
             # wholly contained bins
@@ -273,6 +273,23 @@ class Hist1D(object):
         self._counts = vals_new
         self._edges = edges_new
         self._errors = np.sqrt(vars_new)
+
+    def rebin(self, bins, min_=None, max_=None):
+        """
+        Rebins the contents of the histogram into either `bins` uniform bins from `min_` to `max_` or into variable
+        sized bins with edges defined by `bins`.
+        :param bins: either an int for the number of bins or an numpy array defining the bin edges
+        :param min_: the lower limit for uniform binning
+        :param max_: the upper limit for uniform binning
+        """
+        if type(bins) is int:
+            if min_ is None:
+                min_ = self.edges[0]
+            if max_ is None:
+                max_ = self.edges[-1]
+            self._rebin(np.linspace(min_, max_, bins))
+        else:
+            self._rebin(np.array(bins))
 
     def __eq__(self, other):
         if not self._check_consistency(other): return False
@@ -469,24 +486,28 @@ class Hist2D(Hist1D):
             and np.all(np.abs(self._edges[1] - other.edges[1]) < eps) \
             and np.all(np.abs(self._errors - other.errors) < eps)
 
-    def get_bin_centers(self):
+    @property
+    def bin_centers(self):
         xcenters = 0.5*(self._edges[0][1:]+self._edges[0][:-1])
         ycenters = 0.5*(self._edges[1][1:]+self._edges[1][:-1])
         return xcenters, ycenters
 
-    def get_bin_widths(self):
+    @property
+    def bin_widths(self):
         xwidths = self._edges[0][1:]-self._edges[0][:-1]
         ywidths = self._edges[1][1:]-self._edges[1][:-1]
         return xwidths, ywidths
 
-    def get_x_projection(self):
+    @property
+    def x_projection(self):
         hnew = Hist1D()
         hnew._counts = self._counts.mean(axis=0)
         hnew._errors = np.sqrt((self._errors**2).mean(axis=0))
         hnew._edges = self._edges[0]
         return hnew
 
-    def get_y_projection(self):
+    @property
+    def y_projection(self):
         hnew = Hist1D()
         hnew._counts = self._counts.mean(axis=1)
         hnew._errors = np.sqrt((self._errors**2).mean(axis=1))
@@ -508,12 +529,14 @@ class Hist2D(Hist1D):
         hnew._edges = edges
         return hnew
 
-    def get_x_profile(self):
+    @property
+    def x_profile(self):
         xedges = self._edges[0]
         yedges = self._edges[1]
         return self._calculate_profile(self._counts, self._errors, yedges, xedges)
 
-    def get_y_profile(self):
+    @property
+    def y_profile(self):
         xedges = self._edges[0]
         yedges = self._edges[1]
         return self._calculate_profile(self._counts.T, self._errors.T, xedges, yedges)

@@ -21,12 +21,12 @@ def set_defaults():
     rcParams['figure.subplot.wspace'] = 0.1
 
 
-def add_cms_info(ax, typ="Simulation", lumi="75.0", xtype=0.1):
+def add_cms_info(ax, typ="Simulation", lumi="75.0", energy='13', xtype=0.1):
     ax.text(0.0, 1.01, "CMS", horizontalalignment='left', verticalalignment='bottom', transform=ax.transAxes,
             weight="bold", size="x-large")
     ax.text(xtype, 1.01, typ, horizontalalignment='left', verticalalignment='bottom', transform=ax.transAxes,
             style="italic", size="x-large")
-    ax.text(0.99, 1.01, "%s fb${}^{-1}$ (13 TeV)" % lumi, horizontalalignment='right', verticalalignment='bottom',
+    ax.text(0.99, 1.01, "%s fb${}^{-1}$ (%s TeV)" % (lumi, energy), horizontalalignment='right', verticalalignment='bottom',
             transform=ax.transAxes, size="large")
 
 
@@ -41,6 +41,7 @@ def plot_stack(bgs=None, data=None, sigs=None,
                mpl_sig_params=None,
                cms_type=None,
                lumi="-1",
+               energy="13",
                xticks=None,
                ratio_range=None,
                do_bkg_syst=False,
@@ -70,14 +71,14 @@ def plot_stack(bgs=None, data=None, sigs=None,
         print("What are you even trying to plot?")
         return
 
-    centers = [h.get_bin_centers() for h in bgs]
+    centers = [h.bin_centers for h in bgs]
     weights = [h.counts for h in bgs]
 
     sbgs = sum(bgs)
-    total_integral = sbgs.get_integral()
+    total_integral = sbgs.integral
 
     def percent(bg):
-        return 100.0*bg.get_integral()/total_integral if total_integral > 0 else 0
+        return 100.0*bg.integral/total_integral if total_integral > 0 else 0
     label_map = {bg.get_attr("label"): "{:.0f}%".format(percent(bg)) for bg in bgs}
 
     mpl_bg_hist = {"alpha": 0.9,
@@ -106,7 +107,7 @@ def plot_stack(bgs=None, data=None, sigs=None,
         for bg, patch in zip(bgs, patches):
             patch = patch[0]
             ax_main.errorbar(
-                bg.get_bin_centers(),
+                bg.bin_centers,
                 bg.counts,
                 yerr=bg.errors,
                 markersize=patch.get_linewidth(),
@@ -130,7 +131,7 @@ def plot_stack(bgs=None, data=None, sigs=None,
         data_xerr = None
         select = data.counts != 0
         ax_main.errorbar(
-                data.get_bin_centers()[select],
+                data.bin_centers[select],
                 data.counts[select],
                 yerr=data.errors[select],
                 xerr=data_xerr,
@@ -139,13 +140,13 @@ def plot_stack(bgs=None, data=None, sigs=None,
     if sigs:
         for sig in sigs:
             if mpl_sig_params.get("hist",True):
-                ax_main.hist(sig.get_bin_centers(), bins=bins, weights=sig.counts, color="r", histtype="step",
+                ax_main.hist(sig.bin_centers, bins=bins, weights=sig.counts, color="r", histtype="step",
                              label=sig.get_attr("label","sig"))
-                ax_main.errorbar(sig.get_bin_centers(), sig.counts, yerr=sig.errors, xerr=None,
+                ax_main.errorbar(sig.bin_centers, sig.counts, yerr=sig.errors, xerr=None,
                                  markersize=1, linewidth=1.5, linestyle="",marker="o",color=sig.get_attr("color"))
             else:
                 select = sig.counts != 0
-                ax_main.errorbar(sig.get_bin_centers()[select], sig.counts[select], yerr=sig.errors[select], xerr=None,
+                ax_main.errorbar(sig.bin_centers[select], sig.counts[select], yerr=sig.errors[select], xerr=None,
                                  markersize=3, linewidth=1.5, linestyle="",marker="o", color=sig.get_attr("color"),
                                  label=sig.get_attr("label","sig"))
 
@@ -161,7 +162,7 @@ def plot_stack(bgs=None, data=None, sigs=None,
     ax_main.set_ylim([0.0,ylims[1]])
 
     if cms_type is not None:
-        add_cms_info(ax_main, cms_type, lumi)
+        add_cms_info(ax_main, cms_type, lumi, energy)
 
     # ax_main.yaxis.set_major_locator(matplotlib.ticker.MaxNLocator(integer=True))
 
@@ -177,13 +178,13 @@ def plot_stack(bgs=None, data=None, sigs=None,
                 "label": "Data/MC",
                 # "xerr": data_xerr,
                 }
-        if ratios.get_errors_up() is not None:
-            mpl_opts_ratio["yerr"] = [ratios.get_errors_down(), ratios.get_errors_up()]
+        if ratios.errors_up is not None:
+            mpl_opts_ratio["yerr"] = [ratios.errors_down, ratios.errors_up]
 
         mpl_opts_ratio.update(mpl_data_hist)
         mpl_opts_ratio.update(mpl_ratio_params)
 
-        ax_ratio.errorbar(ratios.get_bin_centers(), ratios.counts, **mpl_opts_ratio)
+        ax_ratio.errorbar(ratios.bin_centers, ratios.counts, **mpl_opts_ratio)
         ax_ratio.set_autoscale_on(False)
         ylims = ax_ratio.get_ylim()
         ax_ratio.plot([ax_ratio.get_xlim()[0], ax_ratio.get_xlim()[1]], [1, 1], color="gray", linewidth=1., alpha=0.5)
@@ -194,8 +195,8 @@ def plot_stack(bgs=None, data=None, sigs=None,
 
         if do_bkg_syst:
             double_edges = np.repeat(ratios.edges,2,axis=0)[1:-1]
-            his = np.repeat(1.+np.abs(sbgs.get_relative_errors()),2)
-            los = np.repeat(1.-np.abs(sbgs.get_relative_errors()),2)
+            his = np.repeat(1.+np.abs(sbgs.relative_errors),2)
+            los = np.repeat(1.-np.abs(sbgs.relative_errors),2)
             ax_ratio.fill_between(double_edges, his, los, step="mid",
                                   alpha=0.4, facecolor='#cccccc', edgecolor='#aaaaaa', linewidth=0.5, linestyle='-')
 
@@ -203,7 +204,7 @@ def plot_stack(bgs=None, data=None, sigs=None,
         ax_ratio.set_xlabel(xlabel, horizontalalignment="right", x=1.)
 
         if xticks is not None:
-            ax_ratio.xaxis.set_ticks(ratios.get_bin_centers())
+            ax_ratio.xaxis.set_ticks(ratios.bin_centers)
             ax_ratio.set_xticklabels(xticks, horizontalalignment='center')
     else:
         ax_main.set_xlabel(xlabel, horizontalalignment="right", x=1.)
@@ -215,19 +216,20 @@ def plot_2d(hist,
             mpl_figure_params={}, mpl_legend_params={},
             cms_type=None, lumi="-1",
             do_log=False, do_projection=False, do_profile=False,
-            cmap="PuBu_r", do_colz=False, colz_fmt=".1f",
+            cmap="PuBu_r", colz_fmt=None,
             logx=False, logy=False,
-            xticks=[], yticks=[],
+            xticks=None, yticks=None,
+            xlim=None, ylim=None,
             zrange=[]):
     set_defaults()
 
     projx, projy = None, None
     if do_projection:
-        projx = hist.get_x_projection()
-        projy = hist.get_y_projection()
+        projx = hist.x_projection
+        projy = hist.y_projection
     elif do_profile:
-        projx = hist.get_x_profile()
-        projy = hist.get_y_profile()
+        projx = hist.x_profile
+        projy = hist.y_profile
 
     fig = plt.gcf()
     ax = plt.gca()
@@ -246,14 +248,21 @@ def plot_2d(hist,
 
         col = matplotlib.cm.get_cmap(cmap)(0.4)
         lw = 1.5
-        axx.hist(projx.get_bin_centers(), bins=projx.edges, weights=np.nan_to_num(projx.counts), histtype="step",
+        axx.hist(projx.bin_centers, bins=projx.edges, weights=np.nan_to_num(projx.counts), histtype="step",
                  color=col, linewidth=lw)
-        axx.errorbar(projx.get_bin_centers(), projx.counts, yerr=projx.errors, linestyle="", marker="o", markersize=0,
+        axx.errorbar(projx.bin_centers, projx.counts, yerr=projx.errors, linestyle="", marker="o", markersize=0,
                      linewidth=lw, color=col)
-        axy.hist(projy.get_bin_centers(), bins=projy.edges, weights=np.nan_to_num(projy.counts), histtype="step",
+        axy.hist(projy.bin_centers, bins=projy.edges, weights=np.nan_to_num(projy.counts), histtype="step",
                  color=col, orientation="horizontal", linewidth=lw)
-        axy.errorbar(projy.counts, projy.get_bin_centers(), xerr=projy.errors, linestyle="", marker="o", markersize=0,
+        axy.errorbar(projy.counts, projy.bin_centers, xerr=projy.errors, linestyle="", marker="o", markersize=0,
                      linewidth=lw, color=col)
+
+    if do_profile:
+        axx.set_ylabel('<' + ylabel + '>')
+        axy.set_xlabel('<' + xlabel + '>')
+    if do_projection:
+        axx.set_ylabel('<count>')
+        axy.set_xlabel('<count>')
 
     ax.set_xlabel(xlabel, horizontalalignment="right", x=1.)
     ax.set_ylabel(ylabel, horizontalalignment="right", y=1.)
@@ -272,6 +281,10 @@ def plot_2d(hist,
             axx.set_yscale("log", nonposy='clip')
             axy.set_xscale("log", nonposx='clip')
     mappable = ax.pcolorfast(X, Y, H, **mpl_2d_hist)
+    if xlim:
+        ax.set_xlim(*xlim)
+    if ylim:
+        ax.set_ylim(*ylim)
 
     if logx:
         ax.set_xscale("log", nonposx='clip')
@@ -280,7 +293,7 @@ def plot_2d(hist,
 
     if colz_fmt is not None:
         xedges, yedges = hist.edges
-        xcenters, ycenters = hist.get_bin_centers()
+        xcenters, ycenters = hist.bin_centers
         counts = hist.counts.flatten()
         errors = hist.errors.flatten()
         pts = np.array([
@@ -307,8 +320,10 @@ def plot_2d(hist,
         fs = min(int(30.0/min(len(xcenters),len(ycenters))),15)
 
         def val_to_text(bv,be):
-            buff = ("{:%s}\n($\pm${:.1f}%%)" % colz_fmt).format(bv,100.0*be/bv)
-            return buff
+            if bv == be == 0.0:
+                return "0\n($\pm$0%)"
+            else:
+                return ("{:%s}\n($\pm${:.1f}%%)" % colz_fmt).format(bv,100.0*be/bv)
 
         do_autosize = True
         for x, y, fxw, bv, be in info:
