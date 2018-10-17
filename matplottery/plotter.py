@@ -4,6 +4,7 @@ from enum import Enum, auto
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
+import warnings
 
 
 import matplottery.utils as utils
@@ -11,15 +12,28 @@ import matplottery.utils as utils
 
 def set_defaults():
     from matplotlib import rcParams
-    rcParams['font.family'] = 'sans-serif'
-    rcParams['font.sans-serif'] = 'helvetica, Helvetica, Arial, Nimbus Sans L, Mukti Narrow, FreeSans, Liberation Sans'
-    rcParams['legend.fontsize'] = 'large'
+    rcParams["font.family"] = "sans-serif"
+    rcParams["font.sans-serif"] = ["Helvetica", "Arial", "Liberation Sans", "Bitstream Vera Sans", "DejaVu Sans"]
+    # rcParams['mathtext.fontset'] = 'custom'
+    # rcParams['mathtext.rm'] = 'Liberation Sans'
+    # rcParams['mathtext.it'] = 'Liberation Sans:italic'
+    # rcParams['mathtext.bf'] = 'Liberation Sans:bold'
+    rcParams['legend.fontsize'] = 11
+    rcParams['legend.labelspacing'] = 0.2
+    # rcParams['axes.xmargin'] = 0.0 # rootlike, no extra padding within x axis
     rcParams['axes.labelsize'] = 'x-large'
-    rcParams['axes.titlesize'] = 'x-large'
+    rcParams['axes.formatter.use_mathtext'] = True
+    rcParams['legend.framealpha'] = 0.65
+    rcParams['axes.labelsize'] = 'x-large'
+    rcParams['axes.titlesize'] = 'large'
     rcParams['xtick.labelsize'] = 'large'
     rcParams['ytick.labelsize'] = 'large'
     rcParams['figure.subplot.hspace'] = 0.1
     rcParams['figure.subplot.wspace'] = 0.1
+    rcParams['figure.subplot.right'] = 0.96
+    rcParams['figure.max_open_warning'] = 0
+    rcParams['figure.dpi'] = 125
+    rcParams["axes.formatter.limits"] = [-5,4] # scientific notation if log(y) outside this
 
 
 def add_cms_info(ax, typ="Simulation", lumi="75.0", energy='13', xtype=0.1):
@@ -55,7 +69,10 @@ def plot_stack(bgs=None, data=None, sigs=None,
                ratio_type=None,
                ratio_range=None,
                do_bkg_syst=False,
-               do_bkg_errors=False):
+               do_bkg_errors=False,
+               ax_main_callback=None,
+               ax_ratio_callback=None,
+               ):
     if bgs is None: bgs = []
     if sigs is None: sigs = []
     if mpl_hist_params is None: mpl_hist_params = {}
@@ -113,7 +130,10 @@ def plot_stack(bgs=None, data=None, sigs=None,
     _, _, patches = ax_main.hist(centers, bins=bins, weights=weights, label=labels, color=colors, **mpl_bg_hist)
     if do_bkg_errors:
         for bg, patch in zip(bgs, patches):
-            patch = patch[0]
+            try:
+                patch = patch[0]
+            except TypeError:
+                pass
             ax_main.errorbar(
                 bg.bin_centers,
                 bg.counts,
@@ -168,6 +188,10 @@ def plot_stack(bgs=None, data=None, sigs=None,
     legend.set_zorder(10)
     ylims = ax_main.get_ylim()
     ax_main.set_ylim([0.0,ylims[1]])
+    ax_main.yaxis.get_offset_text().set_x(-0.095)
+
+    if ax_main_callback:
+        ax_main_callback(ax_main)
 
     if cms_type is not None:
         add_cms_info(ax_main, cms_type, lumi, energy)
@@ -230,6 +254,10 @@ def plot_stack(bgs=None, data=None, sigs=None,
         if xticks is not None:
             ax_ratio.xaxis.set_ticks(ratios.bin_centers)
             ax_ratio.set_xticklabels(xticks, horizontalalignment='center', rotation=45)
+
+        if ax_ratio_callback:
+            ax_ratio_callback(ax_ratio)
+
     else:
         ax_main.set_xlabel(xlabel, horizontalalignment="right", x=1.)
     plt.sca(ax_main)
@@ -337,25 +365,34 @@ def plot_2d(hist,
                 errors
                 ]
         norm = mpl_2d_hist.get("norm",
-                matplotlib.colors.Normalize(
-                    mpl_2d_hist.get("vmin",H.min()),
-                    mpl_2d_hist.get("vmax",H.max()),
-                    ))
+                               matplotlib.colors.Normalize(
+                       mpl_2d_hist.get("vmin",H.min()),
+                       mpl_2d_hist.get("vmax",H.max()),
+                   )
+               )
         val_to_rgba = matplotlib.cm.ScalarMappable(norm=norm, cmap=cmap).to_rgba
         fs = min(int(30.0/min(len(xcenters),len(ycenters))),15)
 
         def val_to_text(bv,be):
-            if bv == be == 0.0:
-                return "0\n($\pm$0%)"
+            if bv < 1.0e-6:
+                pcterr = 0.
             else:
-                return ("{:%s}\n($\pm${:.1f}%%)" % colz_fmt).format(bv,100.0*be/bv)
+                pcterr = 100.0*be/bv
+            if bv < 1.0e-6 and be < 1.0e-6:
+                buff = "0"
+            else:
+                buff = ("{:%s}\n($\pm${:%s}%%)" % (colz_fmt,colz_fmt.replace("e","f"))).format(bv,pcterr)
+            return buff
 
         do_autosize = True
+        if len(np.unique(np.diff(xcenters).round(2)))+len(np.unique(np.diff(ycenters).round(2))) == 2:
+            # for equidistant bins in x and y, don't autosize the bin text
+            do_autosize = False
         for x, y, fxw, bv, be in info:
             if do_autosize:
                 fs_ = min(5.5*fxw*fs,14)
             else:
-                fs_ = 1.0*fs
+                fs_ = 2.5*fs
             color = "w" if (utils.compute_darkness(*val_to_rgba(bv)) > 0.45) else "k"
             ax.text(x, y, val_to_text(bv, be),
                     color=color, ha="center", va="center", fontsize=fs_,
@@ -368,11 +405,11 @@ def plot_2d(hist,
 
     if do_marginal:
         if cms_type is not None:
-            add_cms_info(axx, cms_type, lumi, xtype=0.12)
+            add_cms_info(axx, cms_type, lumi, xtype=0.10)
         axx.set_title(title)
     else:
         if cms_type is not None:
-            add_cms_info(ax, cms_type, lumi, xtype=0.12)
+            add_cms_info(ax, cms_type, lumi, xtype=0.10)
         ax.set_title(title)
 
     if xticks is not None:
@@ -381,4 +418,3 @@ def plot_2d(hist,
     if yticks is not None:
         ax.yaxis.set_ticks(yticks)
         ax.yaxis.set_major_formatter(matplotlib.ticker.ScalarFormatter())
-

@@ -125,11 +125,10 @@ class Hist1D(object):
             obj.SetBinError(nbins, (obj.GetBinError(nbins)**2.+obj.GetBinError(nbins+1)**2.)**0.5)
             obj.SetBinContent(1, obj.GetBinContent(1)+obj.GetBinContent(0))
             obj.SetBinContent(nbins, obj.GetBinContent(nbins)+obj.GetBinContent(nbins+1))
-        low_edges = np.array([1.0*obj.GetBinLowEdge(ibin) for ibin in range(nbins+1)])
-        bin_widths = np.array([1.0*obj.GetBinWidth(ibin) for ibin in range(nbins+1)])
-        self._counts = np.array([1.0*obj.GetBinContent(ibin) for ibin in range(1, nbins+1)], dtype=np.float64)
-        self._errors = np.array([1.0*obj.GetBinError(ibin) for ibin in range(1, nbins+1)], dtype=np.float64)
-        self._edges = low_edges + bin_widths
+        edges = np.array([1.0*obj.GetBinLowEdge(ibin) for ibin in range(1,nbins+2)])
+        self._counts = np.array([1.0*obj.GetBinContent(ibin) for ibin in range(1,nbins+1)],dtype=np.float64)
+        self._errors = np.array([1.0*obj.GetBinError(ibin) for ibin in range(1,nbins+1)],dtype=np.float64)
+        self._edges = edges
 
     def init_uproot(self, obj, **kwargs):
         self._edges = np.array(obj.fXaxis.fXbins)
@@ -380,7 +379,7 @@ class Hist1D(object):
     def __repr__(self):
         use_ascii = False
         if use_ascii: sep = "+-"
-        else: 
+        else:
             if PY2:
                 sep = u"\u00B1".encode("utf-8")
             else:
@@ -389,7 +388,8 @@ class Hist1D(object):
         # so we convert value,error into a complex number and format that 1D array :)
         formatter = {"complex_kind": lambda x:"%5.2f {} %4.2f".format(sep) % (np.real(x),np.imag(x))}
         a2s = np.array2string(self._counts+self._errors*1j,formatter=formatter, suppress_small=True, separator="   ")
-        return "<{}:\n{}\n>".format(self.__class__.__name__,a2s)
+        # return "<{}:\n{}\n>".format(self.__class__.__name__,a2s)
+        return "<{}:{}>".format(self.__class__.__name__,a2s)
 
     def set_attr(self, attr, val):
         self._extra[attr] = val
@@ -433,10 +433,8 @@ class Hist2D(Hist1D):
     def init_root(self, obj, **kwargs):
         xaxis = obj.GetXaxis()
         yaxis = obj.GetYaxis()
-        low_edges_x = np.array([1.0*xaxis.GetBinLowEdge(ibin) for ibin in range(xaxis.GetNbins()+1)])
-        bin_widths_x = np.array([1.0*xaxis.GetBinWidth(ibin) for ibin in range(xaxis.GetNbins()+1)])
-        low_edges_y = np.array([1.0*yaxis.GetBinLowEdge(ibin) for ibin in range(yaxis.GetNbins()+1)])
-        bin_widths_y = np.array([1.0*yaxis.GetBinWidth(ibin) for ibin in range(yaxis.GetNbins()+1)])
+        edges_x = np.array([1.0*xaxis.GetBinLowEdge(ibin) for ibin in range(1,xaxis.GetNbins()+2)])
+        edges_y = np.array([1.0*yaxis.GetBinLowEdge(ibin) for ibin in range(1,yaxis.GetNbins()+2)])
         counts, errors = [], []
         for iy in range(1,obj.GetNbinsY()+1):
             counts_y, errors_y = [], []
@@ -449,7 +447,7 @@ class Hist2D(Hist1D):
             errors.append(errors_y[:])
         self._counts = np.array(counts, dtype=np.float64)
         self._errors = np.array(errors, dtype=np.float64)
-        self._edges = low_edges_x + bin_widths_x, low_edges_y + bin_widths_y
+        self._edges = edges_x, edges_y
 
     def init_uproot(self, obj, **kwargs):
         # these arrays are (Nr+2)*(Nc+2) in size
@@ -501,16 +499,16 @@ class Hist2D(Hist1D):
     @property
     def x_projection(self):
         hnew = Hist1D()
-        hnew._counts = self._counts.mean(axis=0)
-        hnew._errors = np.sqrt((self._errors**2).mean(axis=0))
+        hnew._counts = self._counts.sum(axis=0)
+        hnew._errors = np.sqrt((self._errors**2).sum(axis=0))
         hnew._edges = self._edges[0]
         return hnew
 
     @property
     def y_projection(self):
         hnew = Hist1D()
-        hnew._counts = self._counts.mean(axis=1)
-        hnew._errors = np.sqrt((self._errors**2).mean(axis=1))
+        hnew._counts = self._counts.sum(axis=1)
+        hnew._errors = np.sqrt((self._errors**2).sum(axis=1))
         hnew._edges = self._edges[1]
         return hnew
 
