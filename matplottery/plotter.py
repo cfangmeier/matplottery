@@ -1,5 +1,6 @@
 from __future__ import print_function
 
+from enum import Enum, auto
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
@@ -26,12 +27,20 @@ def add_cms_info(ax, typ="Simulation", lumi="75.0", energy='13', xtype=0.1):
             weight="bold", size="x-large")
     ax.text(xtype, 1.01, typ, horizontalalignment='left', verticalalignment='bottom', transform=ax.transAxes,
             style="italic", size="x-large")
-    ax.text(0.99, 1.01, "%s fb${}^{-1}$ (%s TeV)" % (lumi, energy), horizontalalignment='right', verticalalignment='bottom',
-            transform=ax.transAxes, size="large")
+    ax.text(0.99, 1.01, "%s fb${}^{-1}$ (%s TeV)" % (lumi, energy), horizontalalignment='right',
+            verticalalignment='bottom', transform=ax.transAxes, size="large")
 
+
+class RatioType(Enum):
+    NONE = None
+    DATAOVERBG = auto()
+    DATAOVERBGPLUSSIGNAL = auto()
+    SIGNALOVERBG = auto()
+    SIGNALOVERBGPLUSSIGNAL = auto()
+    SIGNALOVERSQRTBG = auto()
+    SIGNALOVERSQRTBGPLUSSIGNAL = auto()
 
 def plot_stack(bgs=None, data=None, sigs=None,
-               ratio=None,
                title="", xlabel="", ylabel="",
                mpl_hist_params=None,
                mpl_data_params=None,
@@ -43,6 +52,7 @@ def plot_stack(bgs=None, data=None, sigs=None,
                lumi="-1",
                energy="13",
                xticks=None,
+               ratio_type=None,
                ratio_range=None,
                do_bkg_syst=False,
                do_bkg_errors=False):
@@ -94,9 +104,7 @@ def plot_stack(bgs=None, data=None, sigs=None,
     }
     mpl_data_hist.update(mpl_data_params)
 
-    do_ratio = data is not None or ratio is not None
-
-    if do_ratio:
+    if ratio_type is not None:
         fig, (ax_main, ax_ratio) = plt.subplots(2, 1, sharex=True, gridspec_kw={'height_ratios': [9, 2], "top": 0.94},
                                                 **mpl_figure_params)
     else:
@@ -166,16 +174,32 @@ def plot_stack(bgs=None, data=None, sigs=None,
 
     # ax_main.yaxis.set_major_locator(matplotlib.ticker.MaxNLocator(integer=True))
 
-    if do_ratio:
+    if ratio_type is not None:
 
-        if ratio is not None:
-            ratios = ratio
-        else:
+        if ratio_type == RatioType.DATAOVERBG:
             ratios = data/sum(bgs)
+            label = 'Data/BG'
+        elif ratio_type == RatioType.DATAOVERBGPLUSSIGNAL:
+            ratios = data/(sum(bgs) + sum(sigs))
+            label = 'Data/(BG+SIG)'
+        elif ratio_type == RatioType.SIGNALOVERBG:
+            ratios = sum(sigs)/sum(bgs)
+            label = 'SIG/BG'
+        elif ratio_type == RatioType.SIGNALOVERBGPLUSSIGNAL:
+            ratios = sum(sigs)/(sum(bgs) + sum(sigs))
+            label = 'SIG/(BG+SIG)'
+        elif ratio_type == RatioType.SIGNALOVERSQRTBG:
+            ratios = sum(sigs)/np.sqrt(sum(bgs))
+            label = 'SIG/sqrt(BG)'
+        elif ratio_type == RatioType.SIGNALOVERSQRTBGPLUSSIGNAL:
+            ratios = sum(sigs)/np.sqrt(sum(bgs) + sum(sigs))
+            label = 'SIG/sqrt(BG+SIG)'
+        else:
+            raise ValueError('Unknown RatioType: {ratio_type}')
 
         mpl_opts_ratio = {
                 "yerr": ratios.errors,
-                "label": "Data/MC",
+                "label": label,
                 # "xerr": data_xerr,
                 }
         if ratios.errors_up is not None:
@@ -205,9 +229,10 @@ def plot_stack(bgs=None, data=None, sigs=None,
 
         if xticks is not None:
             ax_ratio.xaxis.set_ticks(ratios.bin_centers)
-            ax_ratio.set_xticklabels(xticks, horizontalalignment='center')
+            ax_ratio.set_xticklabels(xticks, horizontalalignment='center', rotation=45)
     else:
         ax_main.set_xlabel(xlabel, horizontalalignment="right", x=1.)
+    plt.sca(ax_main)
 
 
 def plot_2d(hist,
@@ -291,7 +316,7 @@ def plot_2d(hist,
     if logy:
         ax.set_yscale("log", nonposy='clip')
 
-    if colz_fmt is not None:
+    if colz_fmt:
         xedges, yedges = hist.edges
         xcenters, ycenters = hist.bin_centers
         counts = hist.counts.flatten()
