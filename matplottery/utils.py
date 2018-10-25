@@ -541,29 +541,29 @@ class Hist2D(Hist1D):
 
 
 def to_html_table(rows, col_labels, row_labels, table_class):
-    header = '<thead><tr>'+ ''.join(f'<th nowrap>{label}</th>' for label in col_labels) + '</tr></thead>'
+    header = '<thead><tr>'+ ''.join('<th nowrap>{}</th>'.format(label) for label in col_labels) + '</tr></thead>'
 
     body = []
     for label, row in zip(row_labels, rows):
-        body.append(f'<tr><td nowrap>{label}</td>' + ''.join(f'<td nowrap>{val}</td>' for val in row))
-    return f'<table class="table {table_class}">' + header + ''.join(body) + '</table>'
+        body.append('<tr><td nowrap>{}</td>'.format(label) +
+                    ''.join('<td nowrap>{}</td>'.format(val) for val in row))
+    return '<table class="table {}">'.format(table_class) + header + ''.join(body) + '</table>'
 
 
-def hist_to_table(data: Hist1D, bgs: [Hist1D], column_labels=(), format="{:.2f}",
-                  table_class="table-condensed"):
+def hist_to_table(data, bgs, column_labels=(), format="{:.2f}", table_class="table-condensed"):
 
     def row(hist, label=None):
         table.append('<tr>')
         label = hist.get_attr('label') if label is None else label
-        table.append(f"<td nowrap><strong>{label}</strong></td>")
-        table.extend(f'<td>{format.format(count)}</td>' for count in hist.counts)
-        table.append(f'<td>{format.format(sum(hist.counts))}</td></tr>\n')
+        table.append("<td nowrap><strong>{}</strong></td>".format(label))
+        table.extend(('<td>'+format+'</td>').format(count) for count in hist.counts)
+        table.append(('<td>'+format+'</td></tr>\n').format(sum(hist.counts)))
 
-    table = [f'<table class="table {table_class}"><thead><tr><th/>']
+    table = ['<table class="table {}"><thead><tr><th/>'.format(table_class)]
     if column_labels:
-        table.extend(f'<th nowrap>{label}</th>' for label in column_labels)
+        table.extend('<th nowrap>{}</th>'.format(label) for label in column_labels)
     else:
-        table.extend(f'<th nowrap>[{low:g}, {high:g})</th>'
+        table.extend('<th nowrap>[{:g}, {:g})</th>'.format(low, high)
                      for low, high in zip(data.edges[:-1], data.edges[1:]))
     table.append('<th nowrap>Total</th></tr></thead><tbody>\n')
     for hist in bgs:
